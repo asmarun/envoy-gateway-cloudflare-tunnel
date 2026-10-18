@@ -6,10 +6,11 @@
 #   1. a request carrying CF-Connecting-IP reaches the demo app  -> HTTP 200
 #   2. a request WITHOUT that header is refused (failClosed)     -> not 200
 set -euo pipefail
+# shellcheck source=scripts/lib.sh
+source "$(dirname "$0")/lib.sh"
 
 ORIGIN="${ORIGIN:-http://edge-envoy.envoy-gateway-system.svc.cluster.local}"
-NS=cloudflared
-POD="smoke-$RANDOM"
+LABELS="app.kubernetes.io/name=cloudflared,app.kubernetes.io/instance=smoke"
 
 echo "Waiting for the Gateway to be programmed..."
 kubectl -n edge wait --for=condition=Programmed gateway/edge --timeout=180s
@@ -17,28 +18,28 @@ kubectl -n envoy-gateway-system rollout status deployment \
   -l gateway.envoyproxy.io/owning-gateway-name=edge --timeout=180s
 kubectl -n demo rollout status deployment/podinfo --timeout=180s
 
-run_curl() {
-  kubectl -n "$NS" run "$POD" --rm -i --restart=Never --quiet \
-    --labels="app.kubernetes.io/name=cloudflared,app.kubernetes.io/instance=smoke" \
-    --image=curlimages/curl:8.11.1 --command -- \
-    curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$@"
+# One retry: the very first pod on a fresh cluster can lose a race with the image pull.
+request() {
+  local code
+  code=$(run_curl cloudflared "$LABELS" "$@")
+  if [[ -z "$code" ]]; then code=$(run_curl cloudflared "$LABELS" "$@"); fi
+  echo "$code"
 }
 
 fail=0
 
-code=$(run_curl -H 'CF-Connecting-IP: 203.0.113.10' "$ORIGIN/" || true)
+code=$(request -H 'CF-Connecting-IP: 203.0.113.10' "$ORIGIN/")
 if [[ "$code" == "200" ]]; then
   echo "PASS  with CF-Connecting-IP    -> $code"
 else
   echo "FAIL  with CF-Connecting-IP    -> '$code' (expected 200)"; fail=1
 fi
 
-POD="smoke-$RANDOM"
-code=$(run_curl "$ORIGIN/" || true)
-if [[ "$code" != "200" ]]; then
+code=$(request "$ORIGIN/")
+if [[ "$code" != "200" && -n "$code" ]]; then
   echo "PASS  without CF-Connecting-IP -> '$code' (refused, as intended)"
 else
-  echo "FAIL  without CF-Connecting-IP -> 200 (should have been refused)"; fail=1
+  echo "FAIL  without CF-Connecting-IP -> '$code' (expected a refusal)"; fail=1
 fi
 
 exit $fail
