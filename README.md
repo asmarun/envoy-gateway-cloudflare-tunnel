@@ -1,5 +1,7 @@
 # envoy-gateway-cloudflare-tunnel
 
+[![ci](https://github.com/asmarun/envoy-gateway-cloudflare-tunnel/actions/workflows/ci.yaml/badge.svg)](https://github.com/asmarun/envoy-gateway-cloudflare-tunnel/actions/workflows/ci.yaml)
+
 A runnable lab for putting a Kubernetes cluster on the internet **without a public IP or cloud load balancer**: Cloudflare DNS and Tunnel at the edge, [Envoy Gateway](https://gateway.envoyproxy.io) (Kubernetes Gateway API) inside the cluster. It documents the pattern as an alternative to Azure Application Gateway + AGIC, including the migration path and the trade-offs.
 
 > A personal learning project. The patterns are generic and written from scratch; nothing here comes from any employer's code or environment.
@@ -110,6 +112,7 @@ Run on 2026-10-18 on a local minikube cluster (Kubernetes 1.33.1, Calico), Envoy
 | Public request through a quick tunnel (`trycloudflare.com`) reaches the app, which receives `Cf-Connecting-Ip` | pass |
 | `make resilience-test`: 80 of 80 requests succeeded while an Envoy pod was deleted (one client, ~4 req/s) | pass, an observation not a guarantee |
 | Envoy HPA reads CPU from metrics-server | pass |
+| CI on GitHub Actions: lint, schema validation, Terraform, gitleaks, and the Gateway/client-IP smoke test on a kind cluster | pass |
 | `named-tunnel.yaml` accepted by the API server (`--dry-run=server`) | pass |
 | Terraform `apply` and a named tunnel against a real Cloudflare account | **not run** |
 | Multi-region failover (one tunnel per cluster + Cloudflare load balancing) | **not run**; described in [architecture](docs/architecture.md), not simulated |
