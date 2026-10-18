@@ -1,0 +1,114 @@
+# Data-plane settings for the "edge" Gateway.
+#
+# Three decisions live here:
+#   1. envoyService.type = ClusterIP  -> no cloud load balancer, no public IP.
+#      The only way in from the internet is the outbound Cloudflare Tunnel.
+#   2. envoyService.name is set explicitly -> the tunnel's origin URL is stable.
+#      Without it Envoy Gateway generates a name with a hash suffix, and the
+#      tunnel route would have to change whenever the Gateway is recreated.
+#   3. HPA + PDB + spread -> Envoy scales with load and survives node drains.
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: EnvoyProxy
+metadata:
+  name: edge-proxy
+  namespace: edge
+spec:
+  provider:
+    type: Kubernetes
+    kubernetes:
+      envoyDeployment:
+        strategy:
+          type: RollingUpdate
+          rollingUpdate:
+            maxUnavailable: 0
+            maxSurge: 1
+        container:
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              memory: 512Mi
+        pod:
+          affinity:
+            podAntiAffinity:
+              preferredDuringSchedulingIgnoredDuringExecution:
+                - weight: 100
+                  podAffinityTerm:
+                    topologyKey: kubernetes.io/hostname
+                    labelSelector:
+                      matchLabels:
+                        gateway.envoyproxy.io/owning-gateway-name: edge
+                        gateway.envoyproxy.io/owning-gateway-namespace: edge
+          topologySpreadConstraints:
+            - maxSkew: 1
+              topologyKey: kubernetes.io/hostname
+              whenUnsatisfiable: ScheduleAnyway
+              labelSelector:
+                matchLabels:
+                  gateway.envoyproxy.io/owning-gateway-name: edge
+                  gateway.envoyproxy.io/owning-gateway-namespace: edge
+            - maxSkew: 1
+              topologyKey: topology.kubernetes.io/zone
+              whenUnsatisfiable: ScheduleAnyway
+              labelSelector:
+                matchLabels:
+                  gateway.envoyproxy.io/owning-gateway-name: edge
+                  gateway.envoyproxy.io/owning-gateway-namespace: edge
+      envoyHpa:
+        minReplicas: 2
+        maxReplicas: 6
+        metrics:
+          - type: Resource
+            resource:
+              name: cpu
+              target:
+                type: Utilization
+                averageUtilization: 70
+        behavior:
+          scaleDown:
+            # Scale up fast, scale down slowly: tunnels hold long-lived
+            # connections and flapping replicas drops them.
+            stabilizationWindowSeconds: 600
+            policies:
+              - type: Pods
+                value: 1
+                periodSeconds: 60
+      envoyPDB:
+        minAvailable: 1
+      envoyService:
+        name: edge-envoy
+        type: ClusterIP
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: envoy
+spec:
+  controllerName: gateway.envoyproxy.io/gatewayclass-controller
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: edge
+  namespace: edge
+spec:
+  gatewayClassName: envoy
+  infrastructure:
+    parametersRef:
+      group: gateway.envoyproxy.io
+      kind: EnvoyProxy
+      name: edge-proxy
+  listeners:
+    # TLS terminates at the Cloudflare edge; the tunnel carries traffic to this
+    # plain-HTTP listener inside the cluster. See docs/trade-offs.md for the
+    # end-to-end TLS option.
+    - name: http
+      protocol: HTTP
+      port: 80
+      allowedRoutes:
+        namespaces:
+          from: Selector
+          selector:
+            matchLabels:
+              gateway-access: edge

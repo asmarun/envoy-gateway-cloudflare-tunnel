@@ -1,0 +1,22 @@
+# Take the client IP from the header Cloudflare sets, and refuse requests that
+# don't carry it.
+#
+# Why failClosed: if something reaches Envoy without passing through Cloudflare
+# (a misconfigured Service, a pod inside the cluster), there is no trustworthy
+# client IP and the request is rejected instead of silently falling back to a
+# spoofable value. Pair this with the NetworkPolicy in
+# deploy/cloudflared/networkpolicy.yaml so only cloudflared can reach Envoy.
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: ClientTrafficPolicy
+metadata:
+  name: cloudflare-client-ip
+  namespace: edge
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: edge
+  clientIPDetection:
+    customHeader:
+      name: CF-Connecting-IP
+      failClosed: true

@@ -1,0 +1,20 @@
+# Overrides for the Envoy Gateway control plane chart (oci://docker.io/envoyproxy/gateway-helm).
+# Installed by `make install-envoy`; the chart also installs the Gateway API and
+# Envoy Gateway CRDs (crds.enabled defaults to true).
+#
+# Only the settings that matter for this pattern are set here.
+
+deployment:
+  # Two control-plane replicas so a node drain never leaves the data plane
+  # without a controller to reconcile config changes.
+  replicas: 2
+
+podDisruptionBudget:
+  minAvailable: 1
+
+config:
+  envoyGateway:
+    logging:
+      level:
+        # Keep the controller quiet in steady state; raise to info when debugging.
+        default: warn

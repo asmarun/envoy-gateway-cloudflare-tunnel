@@ -1,0 +1,68 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: yamllint
+        run: pipx install yamllint && yamllint -c .yamllint.yaml deploy .github
+
+      - name: kubeconform (Kubernetes + Gateway API + Envoy Gateway schemas)
+        run: |
+          curl -sL https://github.com/yannh/kubeconform/releases/download/v0.8.0/kubeconform-linux-amd64.tar.gz | tar xz kubeconform
+          ./kubeconform -strict -summary \
+            -schema-location default \
+            -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' \
+            -kubernetes-version 1.33.0 \
+            deploy/envoy-gateway deploy/cloudflared deploy/sample-app
+
+      - uses: hashicorp/setup-terraform@v3
+
+      - name: terraform fmt and validate
+        run: |
+          terraform -chdir=terraform/cloudflare fmt -check -recursive
+          cd terraform/cloudflare/example
+          terraform init -backend=false -input=false
+          terraform validate
+
+      - name: gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  e2e:
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/setup-helm@v4
+
+      - name: Create kind cluster
+        uses: helm/kind-action@v1
+        with:
+          cluster_name: gw-lab
+          node_image: kindest/node:v1.33.1
+
+      - name: Install Envoy Gateway, Gateway and sample app
+        run: make up
+
+      - name: Smoke test (client-IP header, fail-closed)
+        run: make smoke
+
+      - name: Dump state on failure
+        if: failure()
+        run: |
+          kubectl get gateway,httproute,envoyproxy,clienttrafficpolicy,backendtrafficpolicy -A
+          kubectl get pods -A
+          kubectl -n envoy-gateway-system logs -l control-plane=envoy-gateway --tail=100

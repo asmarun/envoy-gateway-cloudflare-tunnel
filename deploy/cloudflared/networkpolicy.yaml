@@ -1,0 +1,41 @@
+# Only cloudflared pods may reach the Envoy listener.
+#
+# This is what makes failClosed client-IP trust safe: CF-Connecting-IP can only
+# be forged by something that can reach Envoy, and nothing else can.
+#
+# Notes
+#   - NetworkPolicy matches the *pod* port. Envoy Gateway maps Service port 80 to
+#     container port 10080, so the policy targets 10080, not 80.
+#   - Needs a CNI that enforces NetworkPolicy (Calico, Cilium, Azure NPM, ...).
+#   - The metrics rule below lets a Prometheus in a namespace labelled
+#     `monitoring: "true"` scrape Envoy. Remove it if you don't have one.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: envoy-ingress-from-cloudflared-only
+  namespace: envoy-gateway-system
+spec:
+  podSelector:
+    matchLabels:
+      gateway.envoyproxy.io/owning-gateway-name: edge
+      gateway.envoyproxy.io/owning-gateway-namespace: edge
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: cloudflared
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: cloudflared
+      ports:
+        - protocol: TCP
+          port: 10080
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              monitoring: "true"
+      ports:
+        - protocol: TCP
+          port: 19001

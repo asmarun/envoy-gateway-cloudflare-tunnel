@@ -1,0 +1,36 @@
+# Per-route traffic policy for the demo app: the Envoy equivalents of a few
+# Application Gateway settings (request timeout, health probe, rate limiting).
+# See docs/migration-from-agic.md for the full annotation mapping.
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: BackendTrafficPolicy
+metadata:
+  name: podinfo
+  namespace: demo
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: podinfo
+  timeout:
+    http:
+      requestTimeout: 15s
+  healthCheck:
+    active:
+      type: HTTP
+      interval: 5s
+      timeout: 1s
+      unhealthyThreshold: 3
+      healthyThreshold: 1
+      http:
+        path: /healthz
+        expectedStatuses:
+          - 200
+  rateLimit:
+    type: Local
+    local:
+      rules:
+        # Per Envoy replica, not global. Fine for a lab; use `type: Global`
+        # with the rate-limit service when you need a cluster-wide budget.
+        - limit:
+            requests: 600
+            unit: Minute

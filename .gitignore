@@ -1,0 +1,15 @@
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+*.tfvars
+!*.tfvars.example
+# keep the provider lock file for the example
+!.terraform.lock.hcl
+
+# Secrets and local files
+.env
+*.token
+secrets/
+.DS_Store
