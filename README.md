@@ -8,7 +8,14 @@ A runnable lab for putting a Kubernetes cluster on the internet **without a publ
 
 ## Why
 
-A cloud L7 gateway in front of Kubernetes carries costs that scale with the number of gateways and environments, needs a public entry point, and adds a controller (AGIC) between your manifests and the thing serving traffic. This lab shows a different shape:
+The pattern answers four problems that come up when you run Kubernetes behind Azure Application Gateway and AGIC:
+
+1. **Ingress has no future.** The Kubernetes Ingress API is [frozen](https://kubernetes.io/docs/concepts/services-networking/ingress/): still supported, no plans to remove it, but no longer developed, and the project recommends the Gateway API instead. The most widely used controller, ingress-nginx, was retired with maintenance ending in March 2026. This lab uses a Gateway API implementation (Envoy Gateway).
+2. **Application Gateway with WAF is expensive, and it multiplies.** Each gateway has a fixed charge plus the WAF tier, and depending on your backend-settings needs, one cluster can end up with several gateways in front of it, per environment group and per product.
+3. **Too many separate pieces.** DNS, the gateway and the WAF live in different places. Cloudflare provides DNS, WAF, load balancing and tunnelling on one platform, which simplifies day-to-day maintenance.
+4. **A smaller attack surface.** The tunnel is outbound-only, so there is no public IP and no public entry point to defend.
+
+The shape that results:
 
 ```mermaid
 flowchart LR

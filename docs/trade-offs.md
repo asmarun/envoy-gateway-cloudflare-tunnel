@@ -6,12 +6,13 @@ This pattern is not free of costs. It moves some of them from your cloud bill to
 - **No inbound exposure.** No public IP or load balancer for ingress; the cluster only makes outbound connections.
 - **Config as Kubernetes objects.** Routing, timeouts and rate limits are Gateway API and Envoy policy resources, reviewed and deployed like any other manifest, and reprogrammed in-cluster rather than through a cloud control plane.
 - **Portability.** Gateway API is vendor-neutral; the same routes run on any conformant implementation.
+- **Fewer moving parts to run.** DNS, WAF, load balancing and tunnelling can sit on one platform instead of being spread across several services.
 - **A different cost shape.** Often lower, but you must measure it for your estate. See [cost-model.md](cost-model.md).
 
 ## What you give up or take on
 
 ### A third party in the request path
-Cloudflare terminates TLS and sees plaintext traffic. That is a security, privacy and compliance question: check your data-handling requirements and contracts before you route regulated traffic through it. It is also a **hard dependency**: if Cloudflare is down or your account is suspended, ingress is down, and there is no cloud-native fallback unless you build one.
+Cloudflare terminates TLS and sees plaintext traffic. That is a security, privacy and compliance question: check your data-handling requirements and contracts before you route regulated traffic through it. It is also a **hard dependency**: if Cloudflare is down or your account is suspended, ingress is down, and there is no cloud-native fallback unless you build one. The more you consolidate onto it (DNS, WAF, load balancing and the tunnel in one place), the more convenient it is to run and the larger that dependency becomes.
 
 ### WAF is not a like-for-like swap
 Application Gateway WAF and Cloudflare WAF have different rule sets, tuning workflows and plan entitlements. You will re-validate protection, not just re-point it. Budget time for false-positive tuning.

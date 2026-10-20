@@ -15,6 +15,10 @@ This page gives you a way to compare the two designs for **your** estate. It con
 | In-cluster compute | AGIC controller pods | Envoy proxy pods + Envoy Gateway controller + cloudflared pods |
 | People time | Mostly managed by Azure | You run, upgrade and monitor Envoy and cloudflared |
 
+## Count gateways, not just environments
+
+The gateway's fixed charge is paid **per gateway**. Depending on your backend-settings needs, one cluster can end up with more than one gateway in front of it (for example several for non-production and several for production), and the WAF tier adds to each. So the number to put in the worksheet is the total number of gateways across all clusters, not the number of environments.
+
 ## Worksheet
 
 Compare one environment at a time, per month.
