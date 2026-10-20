@@ -60,6 +60,9 @@ jobs:
       - name: Smoke test (client-IP header, fail-closed)
         run: make smoke
 
+      - name: Drill (controller down)
+        run: make drill-controller-down
+
       - name: Dump state on failure
         if: failure()
         run: |

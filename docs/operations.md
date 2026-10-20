@@ -4,8 +4,9 @@
 
 | Signal | Source | Alert when |
 |---|---|---|
-| cloudflared ready | `GET :2000/ready`, kube readiness | Fewer than 2 ready connectors for more than a few minutes |
-| Tunnel connections | cloudflared metrics on `:2000/metrics` | Connections drop to zero |
+| cloudflared ready | `GET :2000/ready` (returns `readyConnections`), kube readiness | Fewer than your floor of ready connectors for more than a few minutes |
+| Tunnel connections | `cloudflared_tunnel_ha_connections` on `:2000/metrics` | Any connector at zero connections |
+| Origin errors | `cloudflared_tunnel_request_errors`, `cloudflared_proxy_connect_streams_errors` | Rising rate |
 | Envoy health | Envoy metrics on `:19001` | 5xx rate or upstream connect failures rising |
 | Envoy replicas | HPA / PDB status | At `maxReplicas` for a sustained period |
 | Controller reconcile | Envoy Gateway controller logs (level `warn`) | Repeated errors applying Gateway API objects |
@@ -13,6 +14,8 @@
 | Edge errors | Cloudflare analytics | Spike in 52x (origin unreachable) |
 
 Also keep a synthetic check that requests a known hostname from outside the cluster, independent of your own monitoring stack.
+
+See [availability.md](availability.md) for why liveness uses `/healthcheck` and readiness uses `/ready`.
 
 ## Common situations
 

@@ -16,6 +16,9 @@ spec:
     - group: gateway.networking.k8s.io
       kind: Gateway
       name: edge
+      # Scoped to the main listener so a separate health listener (see
+      # docs/availability.md) is not subject to fail-closed client-IP checks.
+      sectionName: http
   clientIPDetection:
     customHeader:
       name: CF-Connecting-IP

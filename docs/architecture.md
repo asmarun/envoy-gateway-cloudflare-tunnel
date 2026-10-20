@@ -62,6 +62,8 @@ An HPA with a long scale-down stabilisation window (10 minutes, one pod per minu
 
 ## High availability
 
+What was actually tested, and what was not, is in [availability.md](availability.md).
+
 | Failure | Behaviour |
 |---|---|
 | One cloudflared pod or node | Other replicas keep serving; the PDB prevents voluntary eviction of the last one |

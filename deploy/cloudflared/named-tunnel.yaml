@@ -68,9 +68,15 @@ spec:
             initialDelaySeconds: 5
             periodSeconds: 10
             failureThreshold: 3
+          # Liveness checks the PROCESS (/healthcheck), not edge connectivity (/ready).
+          # With liveness on /ready, an egress or Cloudflare outage restarts every
+          # connector in a loop, and recovery then waits on CrashLoopBackOff. In the
+          # lab drill that took 165s to recover vs 10s with /healthcheck
+          # (docs/availability.md). Readiness still uses /ready, which is correct:
+          # a connector with no edge connection should not count as available.
           livenessProbe:
             httpGet:
-              path: /ready
+              path: /healthcheck
               port: metrics
             initialDelaySeconds: 10
             periodSeconds: 10

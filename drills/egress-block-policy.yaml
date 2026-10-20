@@ -1,0 +1,40 @@
+# Drill: simulate a firewall that allows DNS, the in-cluster Envoy origin and
+# HTTPS (443) but NOT the tunnel port (7844). cloudflared can no longer reach the
+# Cloudflare edge, exactly as if an egress rule had been tightened.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: drill-cloudflared-egress-block
+  namespace: cloudflared
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: cloudflared
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: envoy-gateway-system
+      ports:
+        - protocol: TCP
+          port: 10080
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - protocol: TCP
+          port: 443

@@ -1,0 +1,91 @@
+# OPTIONAL: a separate listener for health probes that does not require the
+# CF-Connecting-IP header.
+#
+# Why: the main listener fails closed, so any request without the header is
+# rejected with 403. A health monitor (a Cloudflare Load Balancer monitor, or
+# anything probing the origin directly) may not carry that header. Rather than
+# weakening the main listener, expose ONE narrow path on a second listener.
+#
+# Apply with: make health-listener     Remove with: make health-listener-remove
+# (Do not `kubectl delete -f` this file: it contains the Gateway itself.)
+# Then publish a hostname (e.g. health.example.com) on the tunnel pointing to
+# http://edge-envoy.envoy-gateway-system.svc.cluster.local:8081 and aim the
+# monitor at it. Verify first that your monitor actually needs this; see
+# docs/availability.md ("Health checks and fail-closed").
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: edge
+  namespace: edge
+spec:
+  gatewayClassName: envoy
+  infrastructure:
+    parametersRef:
+      group: gateway.envoyproxy.io
+      kind: EnvoyProxy
+      name: edge-proxy
+  listeners:
+    - name: http
+      protocol: HTTP
+      port: 80
+      allowedRoutes:
+        namespaces:
+          from: Selector
+          selector:
+            matchLabels:
+              gateway-access: edge
+    - name: health
+      protocol: HTTP
+      port: 8081
+      allowedRoutes:
+        namespaces:
+          from: Selector
+          selector:
+            matchLabels:
+              gateway-access: edge
+---
+# Only this exact path is reachable on the health listener; everything else 404s.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: podinfo-health
+  namespace: demo
+spec:
+  parentRefs:
+    - name: edge
+      namespace: edge
+      sectionName: health
+  rules:
+    - matches:
+        - path:
+            type: Exact
+            value: /readyz
+      backendRefs:
+        - name: podinfo
+          port: 80
+---
+# Additive: the existing policy allows 10080; this one allows the health listener's
+# container port (listener ports of 1024 and above are used as-is).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: envoy-health-ingress-from-cloudflared-only
+  namespace: envoy-gateway-system
+spec:
+  podSelector:
+    matchLabels:
+      gateway.envoyproxy.io/owning-gateway-name: edge
+      gateway.envoyproxy.io/owning-gateway-namespace: edge
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: cloudflared
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: cloudflared
+      ports:
+        - protocol: TCP
+          port: 8081

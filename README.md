@@ -50,8 +50,9 @@ It is not a free lunch: Cloudflare becomes a hard dependency in the request path
 | `deploy/cloudflared/` | Production-shaped connector (HA Deployment, PDB, hardened), quick-tunnel for demos, NetworkPolicy |
 | `deploy/sample-app/` | A demo app, `HTTPRoute`, and `BackendTrafficPolicy` (timeout, health check, rate limit) |
 | `terraform/cloudflare/` | `tunnel` and `tunnel-routes` modules plus an example (tunnel, route list, DNS) |
-| `scripts/` | Smoke test and NetworkPolicy test |
-| `docs/` | Architecture, AGIC migration guide, trade-offs, cost model, runbook |
+| `scripts/`, `drills/` | Smoke, NetworkPolicy and resilience tests, plus failure drills (controller down, egress block, connector failure) |
+| `deploy/optional/` | A narrow health listener that does not require `CF-Connecting-IP` |
+| `docs/` | Architecture, **availability and drill results**, AGIC migration guide, trade-offs, cost model, runbook |
 
 ## Quickstart A: no account, no domain (about 10 minutes)
 
@@ -66,6 +67,7 @@ make netpol                # only cloudflared may reach Envoy
 make smoke                 # header and fail-closed checks from inside the cluster
 make netpol-test           # a non-cloudflared pod is blocked
 make resilience-test       # delete an Envoy pod mid-traffic through the tunnel
+make drill-controller-down # lose the controller; existing routes serve, new routes wait
 make clean-cluster         # tear it all down
 ```
 
@@ -99,6 +101,10 @@ Each is explained in [docs/architecture.md](docs/architecture.md):
 5. **`CF-Connecting-IP` trusted fail-closed, protected by a NetworkPolicy.** The two controls only work together.
 6. **Envoy scales up fast and down slowly**, to protect long-lived connections.
 
+## Availability
+
+[docs/availability.md](docs/availability.md) covers what protects what, the drills with their results, health checks versus fail-closed, what to monitor, and why egress is the lifeline. One finding worth knowing up front: tie cloudflared **liveness** to `/healthcheck`, not `/ready`, or an outage turns into a restart loop with slow recovery.
+
 ## Migrating from Application Gateway + AGIC
 
 [docs/migration-from-agic.md](docs/migration-from-agic.md) covers the annotation-to-Gateway-API mapping, running both side by side, cutover, rollback and decommission.
@@ -119,9 +125,13 @@ Run on 2026-10-18 on a local minikube cluster (Kubernetes 1.33.1, Calico), Envoy
 | Public request through a quick tunnel (`trycloudflare.com`) reaches the app, which receives `Cf-Connecting-Ip` | pass |
 | `make resilience-test`: 80 of 80 requests succeeded while an Envoy pod was deleted (one client, ~4 req/s) | pass, an observation not a guarantee |
 | Envoy HPA reads CPU from metrics-server | pass |
+| `make drill-controller-down`: existing route keeps serving; a new route is not programmed (404) until the controller returns, then served in about 25 s | pass |
+| `make drill-egress-block`: tunnel egress blocked 90 s; liveness on `/ready` caused 5 restarts and 165 s recovery, on `/healthcheck` 0 restarts and 10 s | pass, single runs |
+| Optional health listener (`make health-listener-test`): narrow path without the header, main listener still fail-closed, intruder blocked | pass |
 | CI on GitHub Actions: lint, schema validation, Terraform, gitleaks, and the Gateway/client-IP smoke test on a kind cluster | pass |
 | `named-tunnel.yaml` accepted by the API server (`--dry-run=server`) | pass |
 | Terraform `apply` and a named tunnel against a real Cloudflare account | **not run** |
+| Connector-failure drill with a named tunnel, node drain, zone loss | **not run**; see [availability](docs/availability.md) |
 | Multi-region failover (one tunnel per cluster + Cloudflare load balancing) | **not run**; described in [architecture](docs/architecture.md), not simulated |
 
 The HPA needs `metrics-server`; `make cluster-minikube` enables it. CI repeats the lint checks and the Gateway/smoke steps on a kind cluster.

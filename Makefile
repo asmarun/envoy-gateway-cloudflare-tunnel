@@ -67,6 +67,32 @@ netpol-test: ## Prove a non-cloudflared pod is blocked
 resilience-test: ## Delete an Envoy pod while sending traffic through the quick tunnel
 	./scripts/resilience-test.sh
 
+.PHONY: drill-controller-down
+drill-controller-down: ## Drill: lose the controller; data plane serves, new routes are not programmed
+	./scripts/drill-controller-down.sh
+
+.PHONY: drill-egress-block
+drill-egress-block: ## Drill: block tunnel egress and compare liveness probes (LIVENESS=ready|healthcheck)
+	./scripts/drill-egress-block.sh
+
+.PHONY: drill-connector-failure
+drill-connector-failure: ## Drill: delete connectors during traffic (needs a named tunnel; URL=https://...)
+	./scripts/drill-connector-failure.sh
+
+.PHONY: health-listener
+health-listener: ## OPTIONAL: add a narrow health listener that does not require CF-Connecting-IP
+	kubectl apply -f deploy/optional/health-listener.yaml
+
+.PHONY: health-listener-remove
+health-listener-remove: ## Remove the optional health listener (restores the single-listener Gateway; never `kubectl delete -f` the optional file)
+	kubectl apply -f deploy/envoy-gateway/10-gateway.yaml
+	kubectl -n demo delete httproute podinfo-health --ignore-not-found
+	kubectl -n envoy-gateway-system delete networkpolicy envoy-health-ingress-from-cloudflared-only --ignore-not-found
+
+.PHONY: health-listener-test
+health-listener-test: ## Verify the optional health listener (needs an enforcing CNI for the last check)
+	./scripts/health-listener-test.sh
+
 .PHONY: up
 up: install-envoy deploy ## Install everything except tunnels and NetworkPolicy
 

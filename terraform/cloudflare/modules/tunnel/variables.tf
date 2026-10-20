@@ -4,6 +4,6 @@ variable "account_id" {
 }
 
 variable "name" {
-  description = "Tunnel name, e.g. one per cluster or region (\"aks-nonprod-eastus2\")."
+  description = "Tunnel name, e.g. one per cluster or region (\"cluster-a\")."
   type        = string
 }
